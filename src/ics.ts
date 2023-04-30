@@ -61,8 +61,7 @@ function parseEvents(data): Record<string, Event> {
 
     if (event.rrule) {
       if (DateTime.fromJSDate(event.rrule.options.until) < today) continue;
-    }
-    else {
+    } else {
       if (DateTime.fromJSDate(event.start) < today) continue;
     }
 
