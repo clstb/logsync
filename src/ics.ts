@@ -69,6 +69,9 @@ function parseEvents(data): Record<string, Event> {
     if (event.rrule) {
       const rrule = event.rrule
       let currentDate = event.rrule.after(today.toJSDate(), true)
+      if (!currentDate) {
+        continue
+      }
       // Get the timezone identifier from the rrule object
       const tzid = rrule.origOptions.tzid
 
