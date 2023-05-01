@@ -144,15 +144,17 @@ async function updateEventBlock(page: PageEntity, event: Event) {
   await logseq.Editor.updateBlock(event.block_uuid, block.content, { properties: block.properties });
 }
 
-function updateEvent(local: Event, remote: Event): [Event, boolean] {
+function updateEvent(now: DateTime, local: Event, remote: Event): [Event, boolean] {
   let changed = false;
   if (local.title !== remote.title) {
     local.title = remote.title;
     changed = true;
   }
   if (local.date !== remote.date) {
-    local.date = remote.date;
-    changed = true;
+    if (local.date.toISOWeekDate() !== now.toISOWeekDate()) {
+      local.date = remote.date;
+      changed = true;
+    }
   }
   if (local.meeting !== remote.meeting) {
     local.meeting = remote.meeting;
@@ -163,6 +165,7 @@ function updateEvent(local: Event, remote: Event): [Event, boolean] {
 
 export class ICS {
   sync = async function() {
+    const now = DateTime.local();
     const calendars = logseq.settings["calendars"];
     for (let calendarName in calendars) {
       const page = await ensureCalendarPage(calendarName);
@@ -172,7 +175,7 @@ export class ICS {
       const toInsert = [];
       for (let uid in remote) {
         if (local[uid]) {
-          const [updated, changed] = updateEvent(local[uid], remote[uid]);
+          const [updated, changed] = updateEvent(now, local[uid], remote[uid]);
           if (changed) {
             await updateEventBlock(page, updated)
           }
