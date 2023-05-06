@@ -16,7 +16,10 @@ type PullRequest = {
   block_uuid?: string;
 }
 async function ensurePullRequestsPage(): Promise<PageEntity> {
-  const page = await logseq.Editor.getPage("github/pull-requests"); if (!page) { return await logseq.Editor.createPage("github/pull-requests"); }
+  const page = await logseq.Editor.getPage("github/pull-requests");
+  if (!page) {
+    return await logseq.Editor.createPage("github/pull-requests");
+  }
   return page;
 }
 
@@ -216,13 +219,11 @@ async function updatePullRequestBlock(pullRequest: PullRequest) {
 }
 
 async function insertPullRequestBlocks(page: PageEntity, pullRequests: PullRequest[]) {
-  const blocks = [];
-  for (const pullRequest of pullRequests) {
-    blocks.push(pullRequestToBlock(pullRequest));
+  const blocks = pullRequests.map(pullRequestToBlock);
+  if (blocks.length === 0) {
+    return
   }
-  if (blocks.length > 0) {
-    await logseq.Editor.insertBatchBlock(page.uuid, blocks, { before: false, sibling: true });
-  }
+  await logseq.Editor.insertBatchBlock(page.uuid, blocks, { before: false, sibling: true });
 }
 
 function updatePullRequest(local: PullRequest, remote: PullRequest): [PullRequest, boolean] {
