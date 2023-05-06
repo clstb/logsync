@@ -6,7 +6,8 @@ import { settingsSchema } from "./settings";
 
 
 function sync(ics: ICS, github: Github, jira: Jira) {
-  const sources  = [ics]
+  const sources = []
+  sources.push(ics)
   if (github != null) {
     sources.push(github)
   }
@@ -22,7 +23,10 @@ function sync(ics: ICS, github: Github, jira: Jira) {
 async function main() {
   logseq.useSettingsSchema(settingsSchema);
 
-  const ics = new ICS();
+  const calendars = logseq.settings["calendars"];
+  const eventRenames = logseq.settings["event-renames"];
+
+  const ics = new ICS(calendars, eventRenames);
 
   const githubToken = logseq.settings["github-token"];
   let github: Github = null;
