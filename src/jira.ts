@@ -13,6 +13,8 @@ type Issue = {
   created: string;
   updated: string;
   status: string;
+  sprint: string;
+  project: string;
 
   block_uuid?: string;
 }
@@ -46,11 +48,13 @@ async function logseqIssues(): Promise<Record<string, Issue>> {
       key: block.properties[".key"],
       url: block.properties[".url"],
       summary: block.properties[".summary"],
+      project: block.properties[".project"],
       creator: block.properties["creator"],
       assignee: block.properties["assignee"],
       created: block.properties["created"],
       updated: block.properties["updated"],
       status: block.properties["status"],
+      sprint: block.properties["sprint"],
       block_uuid: block.uuid,
     }
     issues[issue.id] = issue
@@ -85,6 +89,10 @@ function parseJiraIssue(issue: JiraIssue): Issue {
   const updatedStr = `${updated.toLocaleString("default", { month: "short" })} ${nthNumber(updated.getDate())}, ${updated.getFullYear()}`;
   const creator = `[[jira/people/${issue.fields.creator.displayName}]]`
 
+  const project = issue.fields.project.name
+  const sprint = `[[jira/project/${project}/${issue.fields.sprint.name}]]`
+
+
   const parsed: Issue = {
     id: issue.id,
     key: issue.key,
@@ -94,6 +102,8 @@ function parseJiraIssue(issue: JiraIssue): Issue {
     updated: updatedStr,
     creator: creator,
     status: issue.fields.status.name,
+    project: project,
+    sprint: sprint,
   }
 
   if (issue.fields.assignee) {
@@ -120,12 +130,14 @@ function issueToBlock(issue: Issue) {
       ".key": issue.key,
       ".url": issue.url,
       ".summary": issue.summary,
+      ".project": issue.project,
       "page": `[[jira/issues/${issue.key}]]`,
       "creator": issue.creator,
       "assignee": issue.assignee,
       "created": `[[${issue.created}]]`,
       "updated": `[[${issue.updated}]]`,
       "status": issue.status,
+      "sprint": issue.sprint,
     }
   }
 }
@@ -155,6 +167,10 @@ function updateIssue(local: Issue, remote: Issue): [Issue, boolean] {
   }
   if (local.status !== remote.status) {
     local.status = remote.status;
+    changed = true;
+  }
+  if (local.sprint !== remote.sprint) {
+    local.sprint = remote.sprint;
     changed = true;
   }
   if (local.updated !== remote.updated) {
