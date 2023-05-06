@@ -1,232 +1,194 @@
 import "@logseq/libs";
-import { PageEntity } from "@logseq/libs/dist/LSPlugin.user";
+import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
 import { AgileClient } from "jira.js"
-import { Board, Issue as JiraIssue, Sprint } from "jira.js/out/agile/models"
+import { AgileParameters } from "jira.js"
+import { SyncBlock, Fetcher, marshal, unmarshal } from "./sync";
 
-type Issue = {
+
+export class Board implements SyncBlock {
   id: string;
-  key: string;
-  url: string;
-  summary: string;
-  creator: string;
-  assignee?: string;
-  created: string;
-  updated: string;
-  status: string;
-  sprint: string;
-  project: string;
-
+  namespace: string;
+  synced: string;
   block_uuid?: string;
-}
 
-async function ensureIssuesPage(): Promise<PageEntity> {
-  const page = await logseq.Editor.getPage("jira/issues");
-  if (!page) {
-    return await logseq.Editor.createPage("jira/issues");
-  }
-  return page;
-}
+  name: string = "";
 
-async function jiraBoards(client: AgileClient): Promise<Record<number, Board>> {
-  const boards: Record<number, Board> = {}
-  const response = await client.board.getAllBoards()
-  response.values.forEach((board) => {
-    boards[board.id] = board
-  })
-  return boards
-}
-
-async function logseqIssues(): Promise<Record<string, Issue>> {
-  const blocks = await logseq.Editor.getPageBlocksTree("/jira/issues");
-  const issues = {};
-  for (const block of blocks) {
-    if (!block.properties || !block.properties[".id"]) {
-      continue;
+  marshal(): BlockEntity {
+    const block = marshal(this);
+    const content = this.name;
+    const properties = {
+      ".name": this.name,
     }
-    const issue = {
-      id: block.properties[".id"],
-      key: block.properties[".key"],
-      url: block.properties[".url"],
-      summary: block.properties[".summary"],
-      project: block.properties[".project"],
-      creator: block.properties["creator"],
-      assignee: block.properties["assignee"],
-      created: block.properties["created"],
-      updated: block.properties["updated"],
-      status: block.properties["status"],
-      sprint: block.properties["sprint"],
-      block_uuid: block.uuid,
+
+    block.content = content;
+    for (const [key, value] of Object.entries(properties)) {
+      block.properties[key] = value;
     }
-    issues[issue.id] = issue
-  }
-  return issues;
-}
-
-async function jiraIssues(client: AgileClient, sprintId: number): Promise<Record<number, Issue>> {
-  const issues: Record<number, Issue> = {}
-  // Fetch all issues for the sprint
-  const response = await client.sprint.getIssuesForSprint({
-    sprintId: sprintId,
-    startAt: 0,
-    maxResults: 100,
-  })
-  response.issues.forEach((issue) => {
-    issues[issue.id] = parseJiraIssue(issue)
-  })
-  return issues
-}
-
-function parseJiraIssue(issue: JiraIssue): Issue {
-  const nthNumber = (n: number) => {
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    return block
   };
-
-  const created = new Date(issue.fields.created);
-  const createdStr = `${created.toLocaleString("default", { month: "short" })} ${nthNumber(created.getDate())}, ${created.getFullYear()}`;
-  const updated = new Date(issue.fields.updated);
-  const updatedStr = `${updated.toLocaleString("default", { month: "short" })} ${nthNumber(updated.getDate())}, ${updated.getFullYear()}`;
-  const creator = `[[jira/people/${issue.fields.creator.displayName}]]`
-
-  const project = issue.fields.project.name
-  const sprint = `[[jira/project/${project}/${issue.fields.sprint.name}]]`
-
-
-  const parsed: Issue = {
-    id: issue.id,
-    key: issue.key,
-    url: issue.self,
-    summary: issue.fields.summary,
-    created: createdStr,
-    updated: updatedStr,
-    creator: creator,
-    status: issue.fields.status.name,
-    project: project,
-    sprint: sprint,
-  }
-
-  if (issue.fields.assignee) {
-    parsed.assignee = `[[jira/people/${issue.fields.assignee.displayName}]]`
-  }
-
-  return parsed
+  unmarshal(block: BlockEntity) {
+    unmarshal<this>(block, this);
+    this.name = block.properties[".name"];
+  };
 }
 
-async function jiraSprint(client: AgileClient, boardId: number): Promise<Sprint> {
-  const response = await client.board.getAllSprints({
-    boardId: boardId,
-    state: "active",
-  })
-  return response.values[0]
-}
+export class BoardsFetcher implements Fetcher {
+  client: AgileClient = null;
+  constructor(client: AgileClient) {
+    this.client = client;
+  }
 
-function issueToBlock(issue: Issue) {
-  return {
-    uuid: issue.block_uuid,
-    content: `[${issue.key}: ${issue.summary}](${issue.url})`,
-    properties: {
-      ".id": issue.id,
-      ".key": issue.key,
-      ".url": issue.url,
-      ".summary": issue.summary,
-      ".project": issue.project,
-      "page": `[[jira/issues/${issue.key}]]`,
-      "creator": issue.creator,
-      "assignee": issue.assignee,
-      "created": `[[${issue.created}]]`,
-      "updated": `[[${issue.updated}]]`,
-      "status": issue.status,
-      "sprint": issue.sprint,
+  async fetch<Board>(namespace: string): Promise<Record<string, Board>> {
+    const response = await this.client.board.getAllBoards();
+    const boards = {};
+    for (const v of response.values) {
+      const board = new Board();
+      board.id = v.id.toString();
+      board.namespace = namespace;
+      board.name = v.name;
+      boards[board.id] = board;
     }
+    return boards;
   }
 }
 
-async function updateIssueBlock(issue: Issue) {
-  const block = issueToBlock(issue)
-  await logseq.Editor.updateBlock(issue.block_uuid, block.content, { properties: block.properties })
-}
+export class Sprint implements SyncBlock {
+  id: string;
+  namespace: string;
+  synced: string;
+  block_uuid?: string;
 
-async function insertIssueBlocks(page: PageEntity, issues: Issue[]) {
-  const blocks = issues.map(issueToBlock)
-  if (blocks.length === 0) {
-    return
-  }
-  await logseq.Editor.insertBatchBlock(page.uuid, blocks, { before: false, sibling: true })
-}
+  name: string;
+  start: string = "";
+  end: string = "";
+  complete: string = "";
 
-function updateIssue(local: Issue, remote: Issue): [Issue, boolean] {
-  let changed = false;
-  if (local.summary !== remote.summary) {
-    local.summary = remote.summary;
-    changed = true;
-  }
-  if (local.assignee !== remote.assignee) {
-    local.assignee = remote.assignee;
-    changed = true;
-  }
-  if (local.status !== remote.status) {
-    local.status = remote.status;
-    changed = true;
-  }
-  if (local.sprint !== remote.sprint) {
-    local.sprint = remote.sprint;
-    changed = true;
-  }
-  if (local.updated !== remote.updated) {
-    local.updated = remote.updated;
-    changed = true;
-  }
-
-  return [local, changed];
-}
-
-async function deleteIssueBlocks(issues: Issue[]) {
-  for (const issue of issues) {
-    await logseq.Editor.removeBlock(issue.block_uuid);
-  }
-}
-
-export class Jira {
-  client = null
-  constructor(host: string, email: string, token: string) {
-    this.client = new AgileClient({
-      host: host,
-      authentication: {
-        basic: {
-          email: email,
-          apiToken: token,
-        },
-      },
-    })
-  }
-  sync = async function() {
-    const page = await ensureIssuesPage()
-    const boards = await jiraBoards(this.client)
-    const board = boards[2]
-    const sprint = await jiraSprint(this.client, board.id)
-    const local = await logseqIssues()
-    const remote = await jiraIssues(this.client, sprint.id)
-
-    const toInsert = [];
-    const toDelete = [];
-    for (const issue of Object.values(remote)) {
-      if (local[issue.id]) {
-        const [updated, changed] = updateIssue(local[issue.id], issue)
-        if (changed) {
-          await updateIssueBlock(updated)
-        }
-      } else {
-        toInsert.push(issue)
-      }
-    }
-    for (const issue of Object.values(local)) {
-      if (!remote[issue.id]) {
-        toDelete.push(issue)
-      }
+  marshal(): BlockEntity {
+    const block = marshal(this);
+    const content = this.name;
+    const properties = {
+      ".name": this.name,
+      ".start": this.start,
+      ".end": this.end,
+      ".complete": this.complete,
     }
 
-    await insertIssueBlocks(page, toInsert);
-    await deleteIssueBlocks(toDelete);
+    block.content = content;
+    for (const [key, value] of Object.entries(properties)) {
+      block.properties[key] = value;
+    }
+    return block
+  }
+  unmarshal(block: BlockEntity) {
+    unmarshal<this>(block, this);
+    this.name = block.properties[".name"];
+    this.start = block.properties[".start"];
+    this.end = block.properties[".end"];
+    this.complete = block.properties[".complete"];
+  }
+}
+
+export class SprintsFetcher implements Fetcher {
+  client: AgileClient = null;
+  constructor(client: AgileClient) {
+    this.client = client;
+  }
+
+  async fetch<Sprint>(namespace: string, opts: AgileParameters.GetAllSprints): Promise<Record<string, Sprint>> {
+    const response = await this.client.board.getAllSprints(opts)
+    const sprints = {}
+    for (const v of response.values) {
+      const sprint = new Sprint();
+      sprint.id = v.id.toString();
+      sprint.namespace = namespace;
+      sprint.name = v.name.trim();
+      sprint.start = v.startDate ? v.startDate.toString() : "";
+      sprint.end = v.endDate ? v.endDate.toString() : "";
+      sprint.complete = v.completeDate ? v.completeDate.toString() : "";
+      sprints[sprint.id] = sprint;
+    }
+    return sprints;
+  }
+}
+
+export class Issue implements SyncBlock {
+  id: string;
+  namespace: string;
+  synced: string;
+  block_uuid?: string;
+
+  key: string = "";
+  url: string = "";
+  summary: string = "";
+  creator: string = "";
+  assignee: string = "";
+  status: string = "";
+  created: string = "";
+  updated: string = "";
+  sprint: string = "";
+  project: string = "";
+
+  marshal(): BlockEntity {
+    const block = marshal(this);
+    const content = `[${this.key}: ${this.summary}](${this.url})`;
+    const properties = {
+      ".key": this.key,
+      ".url": this.url,
+      ".summary": this.summary,
+      ".creator": this.creator,
+      ".status": this.status,
+      ".created": this.created,
+      ".updated": this.updated,
+      ".sprint": this.sprint,
+      ".project": this.project,
+    }
+
+    block.content = content;
+    for (const [key, value] of Object.entries(properties)) {
+      block.properties[key] = value;
+    }
+    return block
+  }
+  unmarshal(block: BlockEntity) {
+    unmarshal<this>(block, this);
+    this.key = block.properties[".key"];
+    this.url = block.properties[".url"];
+    this.summary = block.properties[".summary"];
+    this.creator = block.properties[".creator"];
+    this.assignee = block.properties[".assignee"];
+    this.status = block.properties[".status"];
+    this.created = block.properties[".created"];
+    this.updated = block.properties[".updated"];
+    this.sprint = block.properties[".sprint"];
+    this.project = block.properties[".project"];
+  };
+}
+
+export class IssuesFetcher implements Fetcher {
+  client: AgileClient = null;
+  constructor(client: AgileClient) {
+    this.client = client;
+  }
+
+  async fetch<Issue>(namespace: string, opts: AgileParameters.GetIssuesForSprint): Promise<Record<string, Issue>> {
+    const response = await this.client.sprint.getIssuesForSprint(opts)
+    const issues = {};
+    for (const v of response.issues) {
+      const issue = new Issue()
+      issue.id = v.id
+      issue.namespace = namespace
+      issue.key = v.key
+      issue.url = v.self
+      issue.summary = v.fields.summary.replace(/\s+$/, "") 
+      issue.creator = v.fields.creator.displayName
+      issue.assignee = v.fields.assignee?.displayName.trim()
+      issue.status = v.fields.status.name
+      issue.created = v.fields.created
+      issue.updated = v.fields.updated
+      issue.sprint = v.fields.sprint?.name.trim()
+      issue.project = v.fields.project.name.trim()
+      issues[issue.id] = issue
+    }
+    return issues
   }
 }

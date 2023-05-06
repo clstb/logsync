@@ -1,51 +1,61 @@
 import "@logseq/libs";
-import { Github } from "./github";
-import { ICS } from "./ics";
-import { Jira } from "./jira";
 import { settingsSchema } from "./settings";
+import { PullRequest, PullRequestsFetcher, ReviewRequestsFetcher } from "./github";
+import { Board, Sprint, Issue, BoardsFetcher, SprintsFetcher, IssuesFetcher } from "./jira";
+import { sync } from "./sync";
+import { AgileClient } from "jira.js"
+import { Octokit } from "octokit";
 
-
-function sync(ics: ICS, github: Github, jira: Jira) {
-  const sources = []
-  sources.push(ics)
-  if (github != null) {
-    sources.push(github)
-  }
-  if (jira != null) {
-    sources.push(jira)
-  }
-
-  return async function() {
-    await Promise.all(sources.map(source => source.sync()))
-  }
-}
 
 async function main() {
   logseq.useSettingsSchema(settingsSchema);
 
-  const calendars = logseq.settings["calendars"];
-  const eventRenames = logseq.settings["event-renames"];
-
-  const ics = new ICS(calendars, eventRenames);
-
   const githubToken = logseq.settings["github-token"];
-  let github: Github = null;
-  if (githubToken != "") {
-    github = new Github(githubToken);
-  }
+  const githubClient = new Octokit({ auth: githubToken });
 
+  const pullRequestsFetcher = new PullRequestsFetcher(githubClient);
+  const reviewRequestsFetcher = new ReviewRequestsFetcher(githubClient);
 
   const jiraHost = logseq.settings["jira-host"];
   const jiraEmail = logseq.settings["jira-email"];
   const jiraToken = logseq.settings["jira-token"];
-  let jira: Jira = null;
-  if (jiraHost != "" && jiraEmail != "" && jiraToken != "") {
-    jira = new Jira(jiraHost, jiraEmail, jiraToken);
-  }
+  const agileClient = new AgileClient({
+    host: jiraHost,
+    authentication: {
+      basic: {
+        email: jiraEmail,
+        apiToken: jiraToken,
+      },
+    },
+    newErrorHandling: true,
+  });
+  const boardFetcher = new BoardsFetcher(agileClient);
+  const sprintFetcher = new SprintsFetcher(agileClient);
+  const issueFetcher = new IssuesFetcher(agileClient);
+
 
   function createModel() {
     return {
-      sync: sync(ics, github, jira),
+      sync: async function() {
+        const pullRequestsPromise = sync<PullRequest>(PullRequest, "github/pull-requests", pullRequestsFetcher, false);
+        const reviewRequestsPromise = sync<PullRequest>(PullRequest, "github/review-requests", reviewRequestsFetcher, false);
+        const boardIdsPromise = sync<Board>(Board, "jira/boards", boardFetcher, false);
+        const boardIds = await boardIdsPromise;
+        const sprintsPromises = boardIds.map(boardId =>
+          sync<Sprint>(Sprint, `jira/sprints`, sprintFetcher, false, {
+            state: "active,future",
+            boardId: boardId,
+          })
+        );
+        const sprints = await Promise.all(sprintsPromises);
+        const issuesPromises = sprints.flat().map(sprintId =>
+          sync<Issue>(Issue, `jira/issues`, issueFetcher, false, {
+            sprintId: sprintId,
+          })
+        );
+        await Promise.all([pullRequestsPromise, reviewRequestsPromise, ...issuesPromises]);
+        console.log("synced")
+      },
     };
   }
 
