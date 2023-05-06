@@ -9,6 +9,13 @@ export const settingsSchema: SettingSchemaDesc[] = [
     default: {}
   },
   {
+    key: "event-renames",
+    type: "object",
+    title: "Event Renames",
+    description: "Key value pairs of event name and new name",
+    default: {}
+  },
+  {
     key: "github-token",
     type: "string",
     title: "Github Token",
