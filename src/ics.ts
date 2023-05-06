@@ -21,13 +21,15 @@ async function ensureCalendarPage(calendar: string) {
   return page
 }
 
-async function logseqEvents(calendar: string): Promise<Record<string, Event>> {
+async function logseqEvents(calendar: string, eventRenames: Record<string,string>): Promise<Record<string, Event>> {
   const page = await logseq.Editor.getPage(`calendar/${calendar}`);
   if (!page) {
     return {};
   }
+
   const blocks = await logseq.Editor.getPageBlocksTree(`calendar/${calendar}`);
-  const events = {};
+  const events: Record<string,Event> = {};
+
   for (const block of blocks) {
     if (!block.properties || !block.properties[".uid"]) {
       continue;
@@ -41,15 +43,23 @@ async function logseqEvents(calendar: string): Promise<Record<string, Event>> {
     };
     events[event.uid] = event;
   }
+
+  for (const event of Object.values(events)) {
+    const key = Object.keys(eventRenames).find(key => eventRenames[key] === event.title)
+    if (key) {
+      event.title = key
+    }
+  }
+
   return events;
 }
 
-async function remoteEvents(url: string): Promise<Record<string, Event>> {
+async function remoteEvents(url: string, eventRenames: Record<string,string>): Promise<Record<string, Event>> {
   const response = await axios.get(url);
-  return parseEvents(response.data);
+  return parseEvents(response.data, eventRenames);
 }
 
-function parseEvents(data): Record<string, Event> {
+function parseEvents(data, eventRenames: Record<string, string>): Record<string, Event> {
   const parsed = ical.parseICS(data);
   const events: Record<string, Event> = {};
   const today = DateTime.local();
@@ -102,6 +112,13 @@ function parseEvents(data): Record<string, Event> {
       uid: event.uid,
     }
   }
+
+  for (const event of Object.values(events)) {
+    if (eventRenames[event.title]) {
+      event.title = eventRenames[event.title]
+    }
+  }
+
   return events;
 }
 
@@ -170,14 +187,20 @@ function updateEvent(now: DateTime, local: Event, remote: Event): [Event, boolea
 }
 
 export class ICS {
+  calendars = {}
+  eventRenames = {};
+  constructor(calendars: Record<string, string>, eventRenames: Record<string, string>) {
+    this.calendars = calendars;
+    this.eventRenames = eventRenames;
+  }
+
   sync = async function() {
     const now = DateTime.local();
-    const calendars = logseq.settings["calendars"];
-    for (let calendarName in calendars) {
+    for (let calendarName in this.calendars) {
       const page = await ensureCalendarPage(calendarName);
-      const url = calendars[calendarName];
-      const local = await logseqEvents(calendarName);
-      const remote = await remoteEvents(url);
+      const url = this.calendars[calendarName];
+      const local = await logseqEvents(calendarName, this.eventRenames);
+      const remote = await remoteEvents(url, this.eventRenames);
       const toInsert = [];
       const toDelete = [];
       for (let uid in remote) {
