@@ -144,6 +144,12 @@ async function updateEventBlock(page: PageEntity, event: Event) {
   await logseq.Editor.updateBlock(event.block_uuid, block.content, { properties: block.properties });
 }
 
+async function deleteEventBlocks(events: Event[]) {
+  for (const event of events) {
+    await logseq.Editor.removeBlock(event.block_uuid);
+  }
+}
+
 function updateEvent(now: DateTime, local: Event, remote: Event): [Event, boolean] {
   let changed = false;
   if (local.title !== remote.title) {
@@ -173,6 +179,7 @@ export class ICS {
       const local = await logseqEvents(calendarName);
       const remote = await remoteEvents(url);
       const toInsert = [];
+      const toDelete = [];
       for (let uid in remote) {
         if (local[uid]) {
           const [updated, changed] = updateEvent(now, local[uid], remote[uid]);
@@ -183,7 +190,13 @@ export class ICS {
           toInsert.push(remote[uid]);
         };
       }
+      for (let uid in local) {
+        if (!remote[uid]) {
+          toDelete.push(local[uid]);
+        }
+      }
       await insertEventBlocks(page, toInsert);
+      await deleteEventBlocks(toDelete);
     }
   }
 }
