@@ -1,61 +1,82 @@
 import "@logseq/libs";
 import { settingsSchema } from "./settings";
-import { PullRequest, PullRequestsFetcher, ReviewRequestsFetcher } from "./github";
-import { Board, Sprint, Issue, BoardsFetcher, SprintsFetcher, IssuesFetcher } from "./jira";
-import { sync } from "./sync";
-import { AgileClient } from "jira.js"
-import { Octokit } from "octokit";
-
+import { Emitter } from "./events";
+import { Logseq } from "./logseq/api";
+import { Github } from "./github/api";
+import { Jira } from "./jira/api";
+import { PullRequest } from "./github/pull_request";
+import { ICS } from "./ics/api"
 
 async function main() {
   logseq.useSettingsSchema(settingsSchema);
-
+  const calendars = logseq.settings["calendars"];
   const githubToken = logseq.settings["github-token"];
-  const githubClient = new Octokit({ auth: githubToken });
-
-  const pullRequestsFetcher = new PullRequestsFetcher(githubClient);
-  const reviewRequestsFetcher = new ReviewRequestsFetcher(githubClient);
-
   const jiraHost = logseq.settings["jira-host"];
   const jiraEmail = logseq.settings["jira-email"];
-  const jiraToken = logseq.settings["jira-token"];
-  const agileClient = new AgileClient({
-    host: jiraHost,
-    authentication: {
-      basic: {
-        email: jiraEmail,
-        apiToken: jiraToken,
-      },
-    },
-    newErrorHandling: true,
-  });
-  const boardFetcher = new BoardsFetcher(agileClient);
-  const sprintFetcher = new SprintsFetcher(agileClient);
-  const issueFetcher = new IssuesFetcher(agileClient);
+  const jiraApiToken = logseq.settings["jira-token"];
 
+  if (calendars) {
+    new ICS(calendars).register();
+  }
+  if (githubToken) {
+    new Github(githubToken).register();
+  }
+  if (jiraHost && jiraEmail && jiraApiToken) {
+    new Jira(jiraHost, jiraEmail, jiraApiToken).register();
+  }
+
+  // Logseq
+  const ls = new Logseq();
+  ls.register()
+  Emitter.on("gotPage", ls.getOrCreateBlock)
+  Emitter.on("createdPage", ls.createBlock)
+  Emitter.on("gotBlock", ls.updateBlock)
+
+  // ICS
+  Emitter.on("fetchedEvent", (event) => Emitter.emit("upsertBlockWithPage", event))
+
+  // Github
+  Emitter.on("fetchedPullRequest", (pullRequest) => Emitter.emit("upsertBlockWithPage", pullRequest))
+
+  // Jira
+  Emitter.on("fetchedBoard", (board) => Emitter.emit("upsertBlockWithPage", board));
+  Emitter.on("fetchedSprint", (sprint) => Emitter.emit("upsertBlockWithPage", sprint));
+  Emitter.on("fetchedIssue", (issue) => Emitter.emit("fetchIssueDevStatus", {
+    issue: issue,
+    applicationType: "GitHub",
+    dataType: "branch",
+  }));
+  Emitter.on("fetchedIssueDevStatus", (event) => {
+    const [issue, devStatus] = event;
+    const urls = devStatus.detail.map((d) => d.pullRequests.map((p) => p.url)).flat();
+    let pullRequests = ""
+    urls.map((url) => {
+      const split = url.split("/");
+      const repositoryOwner = split[3];
+      const repositoryName = split[4];
+      const pullRequestNumber = split[6];
+      Emitter.emit("fetchPullRequest", new PullRequest({
+        repositoryOwner: repositoryOwner,
+        repositoryName: repositoryName,
+        number: pullRequestNumber,
+      }));
+      pullRequests += `{{embed [[github/${repositoryOwner}/${repositoryName}/pull/${pullRequestNumber}]]}} `
+    })
+    issue.pullRequests = pullRequests;
+    Emitter.emit("upsertBlockWithPage", issue);
+  })
+
+  // Logsync
+  Emitter.on("sync", () => {
+    Emitter.emit("fetchPullRequests");
+    Emitter.emit("fetchReviewRequests");
+    Emitter.emit("fetchBoards");
+    Emitter.emit("fetchCalendars");
+  })
 
   function createModel() {
     return {
-      sync: async function() {
-        const pullRequestsPromise = sync<PullRequest>(PullRequest, "github/pull-requests", pullRequestsFetcher, false);
-        const reviewRequestsPromise = sync<PullRequest>(PullRequest, "github/review-requests", reviewRequestsFetcher, false);
-        const boardIdsPromise = sync<Board>(Board, "jira/boards", boardFetcher, false);
-        const boardIds = await boardIdsPromise;
-        const sprintsPromises = boardIds.map(boardId =>
-          sync<Sprint>(Sprint, `jira/sprints`, sprintFetcher, false, {
-            state: "active,future",
-            boardId: boardId,
-          })
-        );
-        const sprints = await Promise.all(sprintsPromises);
-        const issuesPromises = sprints.flat().map(sprintId =>
-          sync<Issue>(Issue, `jira/issues`, issueFetcher, false, {
-            sprintId: sprintId,
-          })
-        );
-        await Promise.all([pullRequestsPromise, reviewRequestsPromise, ...issuesPromises]);
-        console.log("synced")
-      },
+      sync: () => { Emitter.emit("sync") }
     };
   }
 
