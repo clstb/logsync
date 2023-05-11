@@ -6,6 +6,9 @@ import { Github } from "./github/api";
 import { Jira } from "./jira/api";
 import { PullRequest } from "./github/pull_request";
 import { ICS } from "./ics/api"
+import { v5 } from "uuid";
+
+const namespace = "062249fe-f22c-456e-bcc1-4fcfb2880b08";
 
 async function main() {
   logseq.useSettingsSchema(settingsSchema);
@@ -49,20 +52,25 @@ async function main() {
   Emitter.on("fetchedIssueDevStatus", (event) => {
     const [issue, devStatus] = event;
     const urls = devStatus.detail.map((d) => d.pullRequests.map((p) => p.url)).flat();
-    let pullRequests = ""
+    const uuids = [];
     urls.map((url) => {
       const split = url.split("/");
       const repositoryOwner = split[3];
       const repositoryName = split[4];
       const pullRequestNumber = split[6];
+      const page = `github/${repositoryOwner}/${repositoryName}/pull/${pullRequestNumber}`
+      const uuid = v5(page, namespace);
+      uuids.push(uuid);
       Emitter.emit("fetchPullRequest", new PullRequest({
+        block_uuid: uuid,
         repositoryOwner: repositoryOwner,
         repositoryName: repositoryName,
         number: pullRequestNumber,
       }));
-      pullRequests += `{{embed [[github/${repositoryOwner}/${repositoryName}/pull/${pullRequestNumber}]]}} `
     })
-    issue.pullRequests = pullRequests;
+    if (uuids.length > 0) {
+      issue.pullRequests = uuids.map((uuid) => `{{embed ((${uuid}))}}`).join(" ");
+    }
     Emitter.emit("upsertBlockWithPage", issue);
   })
 

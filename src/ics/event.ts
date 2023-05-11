@@ -16,14 +16,17 @@ export class Event implements Block {
     Object.assign(this, obj)
   }
 
-  page: string;
   block_uuid?: string;
 
   id: string;
   title: string;
   meeting: string;
   date: DateTime;
+  calendar: string;
 
+  page(): string {
+    return `calendars/${this.calendar}/${this.title}`
+  }
   marshal(): BlockEntity {
     const dateString = formatDate(this.date);
     const content = `${this.title}\nSCHEDULED: ${dateString}`;
@@ -32,6 +35,7 @@ export class Event implements Block {
       ".title": this.title,
       ...this.meeting && {"meeting": this.meeting},
       ".date": this.date.toISO(),
+      ".calendar": this.calendar,
     }
     const block = {
       content: content,
@@ -39,15 +43,20 @@ export class Event implements Block {
     } as Partial<BlockEntity>;
     return block as BlockEntity;
   }
-  unmarshal(block: BlockEntity) {
-    this.id = block.properties[".id"];
-    this.title = block.properties[".title"];
-    this.meeting = block.properties["meeting"];
-    this.date = DateTime.fromISO(block.properties[".date"]);
+  unmarshal(block: BlockEntity): Block {
+    this.block_uuid = block.uuid;
+    return new Event({
+      block_uuid: block.uuid,
+      id: block.properties[".id"],
+      title: block.properties[".title"],
+      ...block.properties["meeting"] && {meeting: block.properties["meeting"]},
+      date: DateTime.fromISO(block.properties[".date"]),
+      calendar: block.properties[".calendar"],
+    })
   }
 }
 
-function parseEvents(data): Event[] {
+function parseEvents(calendar, data): Event[] {
   const parsed = ical.parseICS(data);
   const today = DateTime.local();
 
@@ -96,15 +105,16 @@ function parseEvents(data): Event[] {
     events.push(new Event({
       id: event.uid,
       title: title,
-      meeting: meetingMatches ? meetingMatches[1] : null,
+      ...meetingMatches && { meeting: meetingMatches[1] },
       date: date,
+      calendar: calendar,
     }))
   }
 
   return events;
 }
 
-export async function fetchEvents(url: string): Promise<Event[]> {
+export async function fetchEvents(calendar: string, url: string): Promise<Event[]> {
   const response = await axios.get(url);
-  return parseEvents(response.data);
+  return parseEvents(calendar, response.data);
 }

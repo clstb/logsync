@@ -8,15 +8,18 @@ export class Sprint implements Block {
     Object.assign(this, obj)
   }
 
-  page: string;
   block_uuid?: string;
 
   id: number;
-  name: string = "";
+  name: string;
 
+  page(): string {
+    return `jira/sprint/${this.id}`
+  }
   marshal(): BlockEntity {
     const content = this.name;
     const properties = {
+      ".id": this.id,
       ".name": this.name,
     }
     const block = {
@@ -28,15 +31,18 @@ export class Sprint implements Block {
     }
     return block as BlockEntity;
   }
-  unmarshal(block: BlockEntity) {
-    this.name = block.properties[".name"];
+  unmarshal(block: BlockEntity): Block {
+    this.block_uuid = block.uuid;
+    return new Sprint({
+      block_uuid: block.uuid,
+      id: block.properties[".id"],
+      name: block.properties[".name"],
+    })
   }
 }
 
 function parseSprint(v: AgileModels.Sprint): Sprint {
   return new Sprint({
-    page: `jira/sprint/${v.id}`,
-
     id: v.id,
     ...v.name && { name: v.name },
   })

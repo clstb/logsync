@@ -18,9 +18,8 @@ export class ICS {
   }
   fetchEvents = (event: [string, string]) => {
     const [calendar, url] = event;
-    fetchEvents(url).then((events) => {
+    fetchEvents(calendar, url).then((events) => {
       events.map((event) => {
-        event.page = `calendars/${calendar}/${event.title}`
         Emitter.emit("fetchedEvent", event)
       })
     })

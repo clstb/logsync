@@ -7,15 +7,18 @@ export class Board implements Block {
     Object.assign(this, obj)
   }
 
-  page: string;
   block_uuid?: string;
 
   id: number;
-  name: string = "";
+  name: string;
 
+  page(): string {
+    return `jira/board/${this.id}`
+  }
   marshal(): BlockEntity {
     const content = this.name;
     const properties = {
+      ".id": this.id,
       ".name": this.name,
     }
     const block = {
@@ -27,15 +30,18 @@ export class Board implements Block {
     }
     return block as BlockEntity;
   }
-  unmarshal(block: BlockEntity) {
-    this.name = block.properties[".name"];
+  unmarshal(block: BlockEntity): Block {
+    this.block_uuid = block.uuid;
+    return new Board({
+      block_uuid: block.uuid,
+      id: block.properties[".id"],
+      name: block.properties[".name"],
+    })
   }
 }
 
 function parseBoard(v: AgileModels.Board): Board {
   return new Board({
-    page: `jira/board/${v.id}`,
-
     id: v.id,
     ...v.name && { name: v.name },
   })

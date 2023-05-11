@@ -22,8 +22,9 @@ export class Github {
   }
   fetchPullRequest = (pullRequest: PullRequest) => {
     if (pullRequest.id) {
-      fetchPullRequestById(this.client, pullRequest.id).then((pullRequest) => {
-        Emitter.emit("fetchedPullRequest", pullRequest)
+      fetchPullRequestById(this.client, pullRequest.id).then((fetched) => {
+        fetched.block_uuid = pullRequest.block_uuid
+        Emitter.emit("fetchedPullRequest", fetched)
       })
     } else {
       fetchPullRequestByNumber(
@@ -31,8 +32,9 @@ export class Github {
         pullRequest.repositoryName,
         pullRequest.repositoryOwner,
         pullRequest.number,
-      ).then((pullRequest) => {
-        Emitter.emit("fetchedPullRequest", pullRequest)
+      ).then((fetched) => {
+        fetched.block_uuid = pullRequest.block_uuid
+        Emitter.emit("fetchedPullRequest", fetched)
       })
     }
   }
