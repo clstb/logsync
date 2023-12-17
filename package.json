@@ -45,7 +45,7 @@
     "posttest": "npm run lint"
   },
   "logseq": {
-    "main": "dist/index.html",
+    "main": "build/index.html",
     "id": "logsync"
   }
 }
