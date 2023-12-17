@@ -11,6 +11,11 @@ Logsync is an opinionated plugin that synchronizes data from various sources int
     - Recurring events
     - Meeting links (google)
     - Event renaming
+- GitHub
+    - ![GitHub showcase](https://github.com/clstb/logsync/blob/main/gifs/github.gif)
+    - Idemponent synchronization
+    - Created pull requests
+    - Assigned review requests
 
 ## Configuration
 
@@ -25,6 +30,7 @@ Logsync is an opinionated plugin that synchronizes data from various sources int
         "Some event name": "Some new event name"
     }
   },
+  "github-token": "ghp_...",
   "disabled": false
 }
 ```
