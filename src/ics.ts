@@ -9,16 +9,9 @@ const namespace = "dd13a47c-c074-4ef9-9676-66792035d4be"
 
 class EventState {
   title: string;
-  date: string;
+  start: string;
+  end: string;
   meeting?: string;
-}
-
-function formatDate(date: string) {
-  const parsed = DateTime.fromISO(date);
-  // Format date to <2023-04-13 Thu 09:00>
-  const day = parsed.toFormat("ccc");
-  const time = parsed.toFormat("HH:mm");
-  return `<${parsed.toFormat("yyyy-MM-dd")} ${day} ${time}>`;
 }
 
 export class Event implements Block {
@@ -31,24 +24,22 @@ export class Event implements Block {
   state: EventState;
 
   content(): string {
-    const dateString = formatDate(this.state.date);
-    return `[[${this.state.title}]]\nSCHEDULED: ${dateString}`;
+    return `TODO [[${this.state.title}]]\n`;
   };
   properties(): Record<string, string> {
     return {
+      start: formatDate(this.state.start),
+      end: formatDate(this.state.end),
       ...this.state.meeting && {"meeting": this.state.meeting},
     }
   };
-  async read(): Promise<boolean> {
-    const block = await logseq.Editor.getBlock(this.block_uuid)
-    if (!block) {
-      return false
-    }
-    for (let key in this.state) {
-      this.state[key] = block.properties[`.${key}`]
-    }
-    return true
-  }
+}
+
+function formatDate(date: string) {
+  const parsed = DateTime.fromISO(date);
+  // Format date to 2023-04-13 09:00
+  const time = parsed.toFormat("HH:mm");
+  return `${parsed.toFormat("yyyy-MM-dd")} ${time}`;
 }
 
 export async function fetchEvents(
@@ -71,7 +62,8 @@ export async function fetchEvents(
       if (DateTime.fromJSDate(event.start) < today) continue;
     }
 
-    let date = DateTime.fromJSDate(event.start);
+    let start = DateTime.fromJSDate(event.start);
+    const duration = DateTime.fromJSDate(event.end).diff(start);
     if (event.rrule) {
       const rrule = event.rrule
       let currentDate = event.rrule.after(today.toJSDate(), true)
@@ -94,8 +86,12 @@ export async function fetchEvents(
 
       // Adjust the start date by the offset difference to get the corrected start date
       currentDate.setHours(currentDate.getHours() - offsetDiff / 60)
-      date = DateTime.fromJSDate(currentDate)
+      start = DateTime.fromJSDate(currentDate)
     }
+
+    start = start.set({ second: 0, millisecond: 0 });
+    let end = start.plus(duration);
+    end = end.set({ second: 0, millisecond: 0 });
 
     const block_uuid = v5(event.uid, namespace)
 
@@ -109,14 +105,13 @@ export async function fetchEvents(
       meetingMatches = event.description.match(/(https:\/\/meet\.google\.com\/[\w-]+)/);
     }
 
-    date = date.set({ second: 0, millisecond: 0 });
-
     events.push(new Event({
       page: `calendar/${name}`,
       block_uuid: block_uuid,
       state: {
         title: title,
-        date: date.toISO(),
+        start: start.toISO(),
+        end: end.toISO(),
         ...meetingMatches && { meeting: meetingMatches[1] },
       }
     }));
