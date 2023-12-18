@@ -18,15 +18,15 @@ async function main() {
           const renames = renaming[name] ? renaming[name] : {};
           const events = await fetchEvents(name, calendars[name], renames);
           await write(events);
+        }
 
-          if (githubToken) {
-            const octokit = new Octokit({auth: githubToken});
-            const {
-              data: {login},
-            } = await octokit.rest.users.getAuthenticated();
-            const pullRequests = await fetchPullRequests(octokit, login);
-            await write(pullRequests);
-          }
+        if (githubToken) {
+          const octokit = new Octokit({auth: githubToken});
+          const {
+            data: {login},
+          } = await octokit.rest.users.getAuthenticated();
+          const pullRequests = await fetchPullRequests(octokit, login);
+          await write(pullRequests);
         }
       },
     };
