@@ -1,7 +1,5 @@
 # Logsync
 
-Logsync is an opinionated plugin that synchronizes data from various sources into logseq.
-
 ## Features
 
 - ICS
