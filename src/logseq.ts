@@ -1,24 +1,13 @@
-import {BlockUUID} from '@logseq/libs/dist/LSPlugin.user';
+import {BlockUUID, BlockEntity} from '@logseq/libs/dist/LSPlugin.user';
 
 export interface Block {
   page: string;
   blockUUID: BlockUUID;
-  state: Record<string, unknown>;
+  state: Record<string, string>;
 
   content(): string;
   properties(): Record<string, string>;
-}
-
-export async function read(block: Block): Promise<[Block, boolean]> {
-  const blockEntity = await logseq.Editor.getBlock(block.blockUUID);
-  if (!blockEntity) {
-    return [block, false];
-  }
-
-  for (const key in block.state) {
-    block.state[key] = blockEntity.properties[`.${key}`];
-  }
-  return [block, true];
+  read(blockEntity: BlockEntity | null): Promise<void>;
 }
 
 export async function write(blocks: Block[]) {

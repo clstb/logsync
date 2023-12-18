@@ -7,12 +7,12 @@ import {v5} from 'uuid';
 
 const namespace = 'dd13a47c-c074-4ef9-9676-66792035d4be';
 
-class EventState {
-  title: string;
-  start: string;
-  end: string;
-  meeting?: string;
-}
+const EventState = {
+  title: '',
+  start: '',
+  end: '',
+  meeting: '',
+};
 
 function formatDate(date: string) {
   const parsed = DateTime.fromISO(date);
@@ -24,11 +24,13 @@ function formatDate(date: string) {
 class Event implements Block {
   constructor(obj: Record<string, unknown>) {
     Object.assign(this, obj);
+    const state = obj.state ? obj.state : {};
+    this.state = state as typeof EventState;
   }
 
   page: string;
   blockUUID: BlockUUID;
-  state: EventState;
+  state: typeof EventState;
 
   content(): string {
     return `TODO [[${this.state.title}]]\n`;
@@ -39,6 +41,15 @@ class Event implements Block {
       end: formatDate(this.state.end),
       ...(this.state.meeting && {meeting: this.state.meeting}),
     };
+  }
+  async read(blockEntity: BlockEntity | null): Promise<void> {
+    if (!blockEntity) {
+      blockEntity = await logseq.Editor.getBlock(this.blockUUID);
+    }
+    Object.keys(EventState).map(key => {
+      if (!blockEntity?.properties[`.${key}`]) return;
+      this.state[key] = blockEntity.properties[`.${key}`];
+    });
   }
 }
 
