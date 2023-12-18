@@ -4,14 +4,14 @@
 
 - ICS
     - ![ICS showcase](https://github.com/clstb/logsync/blob/main/gifs/ics.gif)
-    - Idemponent synchronization
+    - Idempotent synchronization
     - Any number of calendars
     - Recurring events
     - Meeting links (google)
     - Event renaming
 - GitHub
     - ![GitHub showcase](https://github.com/clstb/logsync/blob/main/gifs/github.gif)
-    - Idemponent synchronization
+    - Idempotent synchronization
     - Created pull requests
     - Assigned review requests
 
