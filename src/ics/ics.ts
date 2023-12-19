@@ -7,7 +7,7 @@ import {v5} from 'uuid';
 
 const namespace = 'dd13a47c-c074-4ef9-9676-66792035d4be';
 
-const EventState = {
+export const EventState = {
   title: '',
   start: '',
   end: '',
@@ -21,7 +21,7 @@ function formatDate(date: string) {
   return `${parsed.toFormat('yyyy-MM-dd')} ${time}`;
 }
 
-class Event implements Block {
+export class Event implements Block {
   constructor(obj: Record<string, unknown>) {
     Object.assign(this, obj);
     const state = obj.state ? obj.state : {};

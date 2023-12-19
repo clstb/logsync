@@ -1,8 +1,8 @@
 import '@logseq/libs';
-import {settingsSchema} from './settings';
-import {fetchEvents} from './ics';
-import {fetchPullRequests} from './github';
-import {write} from './logseq';
+import {settingsSchema} from './logseq/settings';
+import {fetchEvents} from './ics/ics';
+import {fetchPullRequests} from './github/pull_request';
+import {write} from './logseq/logseq';
 import {Octokit} from 'octokit';
 
 async function main() {

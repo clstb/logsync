@@ -4,10 +4,12 @@ import {Octokit} from 'octokit';
 import {DateTime} from 'luxon';
 import util from 'util';
 import {v5} from 'uuid';
+import {PRQuery, PRReviewQuery, PRByIdQuery} from './query';
+import {Review} from './review';
 
 const namespace = '4bd381ac-4474-4b43-ac28-17e0c6c1ebd3';
 
-const PullRequestState = {
+export const PullRequestState = {
   id: '',
   title: '',
   repository: '',
@@ -15,6 +17,7 @@ const PullRequestState = {
   url: '',
   created: '',
   updated: '',
+  reviews: '',
 };
 
 function formatDate(date: string) {
@@ -23,7 +26,7 @@ function formatDate(date: string) {
   return `${parsed.toFormat('yyyy-MM-dd')}`;
 }
 
-class PullRequest implements Block {
+export class PullRequest implements Block {
   constructor(obj: Record<string, unknown>) {
     Object.assign(this, obj);
     const state = obj.state ? obj.state : {};
@@ -44,6 +47,14 @@ class PullRequest implements Block {
       state: this.state.state,
       created: `[[${formatDate(this.state.created)}]]`,
       updated: `[[${formatDate(this.state.updated)}]]`,
+      ...(this.state.reviews && {
+        reviews: this.state.reviews
+          .split(' ')
+          .map(uuid => {
+            return `((${uuid}))`;
+          })
+          .join('@@html: <br>@@'),
+      }),
     };
   }
   async read(blockEntity: BlockEntity | null): Promise<void> {
@@ -56,47 +67,6 @@ class PullRequest implements Block {
     });
   }
 }
-
-const baseQuery = `
-{
-  search(query: "%s", type: ISSUE, first: 100) {
-    edges {
-      node {
-        ... on PullRequest {
-          repository {
-            nameWithOwner
-          }
-          url
-          title
-          id
-          state
-          createdAt
-          updatedAt
-        }
-      }
-    }
-  }
-}
-`;
-const prQuery = util.format(baseQuery, 'type:pr state:open author:%s');
-const reviewQuery = util.format(baseQuery, 'state:open review-requested:%s');
-const byIdQuery = `
-{
-  nodes(ids: [%s]) {
-    ... on PullRequest {
-      repository {
-        nameWithOwner
-      }
-      url
-      title
-      id
-      state
-      createdAt
-      updatedAt
-    }
-  }
-}
-`;
 
 export async function fetchPullRequests(
   octokit: Octokit,
@@ -113,11 +83,11 @@ export async function fetchPullRequests(
   }
 
   const localPullRequests = await octokit.graphql(
-    util.format(byIdQuery, ids.map(id => `"${id}"`).join(','))
+    util.format(PRByIdQuery, ids.map(id => `"${id}"`).join(','))
   );
-  const pullRequests = await octokit.graphql(util.format(prQuery, username));
+  const pullRequests = await octokit.graphql(util.format(PRQuery, username));
   const reviewRequests = await octokit.graphql(
-    util.format(reviewQuery, username)
+    util.format(PRReviewQuery, username)
   );
 
   const nodes = [
@@ -143,7 +113,43 @@ export async function fetchPullRequests(
         updated: node.updatedAt,
       },
     });
-    result[node.id] = pr;
+
+    const reviews = [];
+    for (const review of node.latestReviews.nodes) {
+      const reviewUUID = v5(review.id, namespace);
+      const reviewBlock = new Review({
+        page: 'github/reviews',
+        blockUUID: reviewUUID,
+        state: {
+          id: review.id,
+          state: review.state,
+          prState: node.state,
+          login: review.author.login,
+          created: node.createdAt,
+          updated: node.updatedAt,
+        },
+      });
+      reviews.push(reviewBlock);
+    }
+
+    for (const reviewRequest of node.reviewRequests.nodes) {
+      const reviewUUID = v5(reviewRequest.id, namespace);
+      const reviewBlock = new Review({
+        page: 'github/reviews',
+        blockUUID: reviewUUID,
+        state: {
+          id: reviewRequest.id,
+          state: 'REQUESTED',
+          prState: node.state,
+          login: reviewRequest.requestedReviewer.login,
+        },
+      });
+      reviews.push(reviewBlock);
+    }
+
+    pr.state.reviews = reviews.map(review => review.blockUUID).join(' ');
+    result[pr.state.id] = pr;
+    reviews.map(review => (result[review.state.id] = review));
   }
 
   return Object.values(result);
