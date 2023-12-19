@@ -3,14 +3,14 @@
 ## Features
 
 - ICS
-    - ![ICS showcase](https://github.com/clstb/logsync/blob/main/gifs/ics.gif)
+    - ![ICS showcase](./gifs/ics.gif)
     - Idempotent synchronization
     - Any number of calendars
     - Recurring events
     - Meeting links (google)
     - Event renaming
 - GitHub
-    - ![GitHub showcase](https://github.com/clstb/logsync/blob/main/gifs/github.gif)
+    - ![GitHub showcase](./gifs/github.gif)
     - Idempotent synchronization
     - Created pull requests
     - Assigned review requests
