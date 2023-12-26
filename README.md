@@ -32,3 +32,7 @@
   "disabled": false
 }
 ```
+
+## Contributing
+
+Create a pull request or open an issue to report bugs and request features.
