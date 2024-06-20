@@ -72,14 +72,17 @@ export async function fetchPullRequests(
   octokit: Octokit,
   username: string
 ): Promise<Block[]> {
-  const blocks = await logseq.Editor.getPageBlocksTree('github/pull-requests');
   const ids: string[] = [];
 
-  for (const block of blocks) {
-    const pr = new PullRequest({});
-    pr.read(block);
-    if (pr.state.state !== 'OPEN') continue;
-    ids.push(pr.state.id);
+  let page = await logseq.Editor.getPage('github/pull-requests');
+  if (page) {
+    const blocks = await logseq.Editor.getPageBlocksTree('github/pull-requests');
+    for (const block of blocks) {
+      const pr = new PullRequest({});
+      pr.read(block);
+      if (pr.state.state !== 'OPEN') continue;
+      ids.push(pr.state.id);
+    }
   }
 
   const localPullRequests = await octokit.graphql(

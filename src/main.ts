@@ -26,7 +26,16 @@ async function main() {
             data: {login},
           } = await octokit.rest.users.getAuthenticated();
           const pullRequests = await fetchPullRequests(octokit, login);
-          await write(pullRequests);
+
+          let blacklist = logseq.settings['repository-blacklist'].split(',');
+          let filtered = []
+          for (let pr of pullRequests) {
+            if (!blacklist.includes(pr.state.repository)) {
+              filtered.push(pr);
+            }
+          }
+
+          await write(filtered);
         }
       },
     };

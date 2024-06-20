@@ -23,4 +23,11 @@ export const settingsSchema: SettingSchemaDesc[] = [
     description: 'GitHub API Token',
     default: '',
   },
+  {
+    key: 'repository-blacklist',
+    type: 'string',
+    title: 'Repository Blacklist',
+    description: 'Comma separated list of repository names to ignore',
+    default: '',
+  },
 ];
