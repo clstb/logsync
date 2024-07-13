@@ -18,7 +18,7 @@ function formatDate(date: string) {
   const parsed = DateTime.fromISO(date);
   // Format date to 2023-04-13 09:00
   const time = parsed.toFormat('HH:mm');
-  return `${parsed.toFormat('yyyy-MM-dd')} ${time}`;
+  return `[[${parsed.toFormat('yyyy-MM-dd')}]] ${time}`;
 }
 
 export class Event implements Block {
@@ -33,7 +33,7 @@ export class Event implements Block {
   state: typeof EventState;
 
   content(): string {
-    return `TODO [[${this.state.title}]]\n`;
+    return `${this.state.title}\n`;
   }
   properties(): Record<string, string> {
     return {
